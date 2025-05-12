@@ -43,9 +43,10 @@ class OAuth2ClientHooks {
 		$inExt = ( null == $page || ('OAuth2Client' == substr( $page->getText(), 0, 12) ) || strstr($page->getText(), 'Logout') );
 		$links['user-menu']['anon_oauth_login'] = array(
 			'single-id' => 'pt-oauth',
-			'text' => $service_login_link_text,
+			'text' => false,
 			'active' => false,
-			'icon' => 'oauth',
+			'icon' => 'LogIn',
+			'raw' => true
 		);
 		if( $inExt ) {
 			$links['user-menu']['anon_oauth_login']['href'] = Skin::makeSpecialUrlSubpage( 'OAuth2Client', 'redirect' );

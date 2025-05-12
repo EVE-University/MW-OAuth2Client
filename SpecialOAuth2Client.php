@@ -18,6 +18,7 @@ if ( !defined( 'MEDIAWIKI' ) ) {
 	die( 'This is a MediaWiki extension, and must be run from within MediaWiki.' );
 }
 require __DIR__.'/JsonHelper.php';
+use MediaWiki\MediaWikiServices;
 use Firebase\JWT\JWT;
 use Firebase\JWT\JWK;
 
@@ -103,7 +104,7 @@ class SpecialOAuth2Client extends SpecialPage {
 	private function _handleCallback(){
 
 
-	global $wgRequest;
+	global $wgRequest, $wgOAuth2Client;
 
 		try {
 			$storedState = $wgRequest->getSession()->get('oauth2state');
@@ -135,8 +136,12 @@ class SpecialOAuth2Client extends SpecialPage {
                 // Get JWT token
 		$jwt = $accessToken->getToken();
 
-		// Fetch CCP public keys
-		$jwks = json_decode(file_get_contents('https://login.eveonline.com/oauth/jwks'), true);
+		// Fetch CCP public keys safely
+		$jwksRaw = file_get_contents('https://login.eveonline.com/oauth/jwks');
+		if (!$jwksRaw) {
+			throw new Exception('Failed to fetch CCP JWKS');
+		}
+		$jwks = json_decode($jwksRaw, true);
 		$keys = JWK::parseKeySet($jwks);
 
 		// Decode and verify the JWT
@@ -144,8 +149,9 @@ class SpecialOAuth2Client extends SpecialPage {
     			$decoded = JWT::decode($jwt, $keys);
     			$claims = (array)$decoded;
 
+
     			// Optional: parse 'CHARACTER:12345678' → '12345678'
-    			if (isset($claims['sub']) && str_stipos($claims['sub'], 'CHARACTER:') === 0) {
+    			if (isset($claims['sub']) && str_starts_with($claims['sub'], 'CHARACTER:')) {
         			$parts = explode(':', $claims['sub']);
 				if (count($parts) === 3 && $parts[0] === 'CHARACTER') {
 				    	$claims['characterID'] = $parts[2]; // ✅ correct ID
@@ -155,14 +161,23 @@ class SpecialOAuth2Client extends SpecialPage {
 
     			}
 
+    			// Validate audience
+			if (!in_array($wgOAuth2Client['client']['id'], $claims['aud'] ?? [])) {
+				throw new Exception("JWT 'aud' claim does not contain our client ID");
+    			}
+
+
+    			wfDebugLog('oauth2client', "Authenticated character: {$claims['characterID']} ({$claims['name']})");
+
     			$resourceOwner = $claims;
+
 
 			} catch (Exception $e) {
     				exit("JWT validation failed: " . $e->getMessage());
 			}
 
 
-		$user = $this->_userHandling( $resourceOwner->toArray() );
+		$user = $this->_userHandling( $resourceOwner );
 		$user->setCookies();
 
 		global $wgOut, $wgRequest;
@@ -216,6 +231,7 @@ class SpecialOAuth2Client extends SpecialPage {
 			$callback_failure_message = $wgOAuth2Client['configuration']['authz_failure_message'] ?? 'Not authorized';
 			throw new MWException($callback_failure_message);
 		}
+
 
 		$username = JsonHelper::extractValue($response, $wgOAuth2Client['configuration']['username']);
 		$email =  JsonHelper::extractValue($response, $wgOAuth2Client['configuration']['email']);
