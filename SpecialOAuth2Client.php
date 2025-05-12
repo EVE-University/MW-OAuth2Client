@@ -18,6 +18,9 @@ if ( !defined( 'MEDIAWIKI' ) ) {
 	die( 'This is a MediaWiki extension, and must be run from within MediaWiki.' );
 }
 require __DIR__.'/JsonHelper.php';
+use Firebase\JWT\JWT;
+use Firebase\JWT\JWK;
+
 
 class SpecialOAuth2Client extends SpecialPage {
 
@@ -42,7 +45,13 @@ class SpecialOAuth2Client extends SpecialPage {
 		global $wgOAuth2Client, $wgScriptPath;
 		global $wgServer, $wgArticlePath;
 
-		require __DIR__ . '/vendors/oauth2-client/vendor/autoload.php';
+		$composerAutoload = dirname(__DIR__, 2) . '/vendor/autoload.php';
+		if (file_exists($composerAutoload)) {
+    			require_once $composerAutoload;
+		} else {
+    			die('Composer autoload not found. Make sure you ran composer update.');
+		}
+
 
 		$this->_provider = new \League\OAuth2\Client\Provider\GenericProvider([
 			'clientId'                => $wgOAuth2Client['client']['id'],    // The client ID assigned to you by the provider
@@ -92,7 +101,9 @@ class SpecialOAuth2Client extends SpecialPage {
 	}
 
 	private function _handleCallback(){
-		global $wgRequest;
+
+
+	global $wgRequest;
 
 		try {
 			$storedState = $wgRequest->getSession()->get('oauth2state');
@@ -110,12 +121,47 @@ class SpecialOAuth2Client extends SpecialPage {
 				'code' => $_GET['code']
 			]);
 		} catch (\League\OAuth2\Client\Provider\Exception\IdentityProviderException $e) {
-			exit($e->getMessage()); // Failed to get the access token or user details.
+		    echo "<pre><strong>OAuth2 Error Response</strong>\n";
+		    echo "Raw response body:\n";
+		    echo htmlentities($e->getResponseBody());
+		    echo "\n\nFull error:\n";
+		    echo htmlentities($e->getMessage());
+		    echo "</pre>";
+		    die(); 
 		} catch (UnexpectedValueException $e) {
 			exit($e->getMessage());
 		}
 
-		$resourceOwner = $this->_provider->getResourceOwner($accessToken);
+                // Get JWT token
+		$jwt = $accessToken->getToken();
+
+		// Fetch CCP public keys
+		$jwks = json_decode(file_get_contents('https://login.eveonline.com/oauth/jwks'), true);
+		$keys = JWK::parseKeySet($jwks);
+
+		// Decode and verify the JWT
+		try {
+    			$decoded = JWT::decode($jwt, $keys);
+    			$claims = (array)$decoded;
+
+    			// Optional: parse 'CHARACTER:12345678' → '12345678'
+    			if (isset($claims['sub']) && str_stipos($claims['sub'], 'CHARACTER:') === 0) {
+        			$parts = explode(':', $claims['sub']);
+				if (count($parts) === 3 && $parts[0] === 'CHARACTER') {
+				    	$claims['characterID'] = $parts[2]; // ✅ correct ID
+				} else {
+			    		throw new Exception('Invalid sub format in JWT: ' . $claims['sub']);
+				}
+
+    			}
+
+    			$resourceOwner = $claims;
+
+			} catch (Exception $e) {
+    				exit("JWT validation failed: " . $e->getMessage());
+			}
+
+
 		$user = $this->_userHandling( $resourceOwner->toArray() );
 		$user->setCookies();
 

@@ -1,10 +1,11 @@
 {
 	"name": "MW-OAuth2Client",
-	"version": "0.4",
+	"version": "0.5",
 	"author": [
 		"[http://dekeijzer.org Joost de Keijzer]",
 		"[https://www.mediawiki.org/wiki/User:Nischayn22 Nischay Nahata]",
-		"[https://star-made.org Schine GmbH]"
+		"[https://star-made.org Schine GmbH]",
+		"[https://github.com/EVE-University/MW-OAuth2Client Bates Larsson]"
 	],
 	"url": "https://www.mediawiki.org/wiki/Extension:OAuth2_Client",
 	"descriptionmsg": "oauth2client-act-as-a-client-to-any-oauth2-server",
