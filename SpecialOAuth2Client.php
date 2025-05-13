@@ -146,6 +146,7 @@ class SpecialOAuth2Client extends SpecialPage {
 
 		// Decode and verify the JWT
 		try {
+                        JWT::$leeway = $wgOAuth2Client['configuration']['jwt_leeway'] ?? 10;
     			$decoded = JWT::decode($jwt, $keys);
     			$claims = (array)$decoded;
 
